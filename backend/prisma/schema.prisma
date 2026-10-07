@@ -42,3 +42,20 @@ model Employee {
 
   @@map("employees")
 }
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(VIEWER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
