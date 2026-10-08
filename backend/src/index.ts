@@ -5,6 +5,7 @@ import authRoutes from "./routes/auth.routes";
 import departmentRoutes from "./routes/department.routes";
 import { errorHandler, notFound } from "./middleware/errorHandler";
 import employeeRoutes from "./routes/employee.routes";
+import auditRoutes from "./routes/audit.routes";
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/departments", departmentRoutes);
 app.use("/employees", employeeRoutes);
+app.use("/audit-logs", auditRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

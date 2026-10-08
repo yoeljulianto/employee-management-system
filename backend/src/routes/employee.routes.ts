@@ -5,6 +5,7 @@ import { Prisma } from "../generated/prisma/client";
 import { authenticate, requireRole } from "../middleware/auth";
 import { AppError } from "../utils/AppError";
 import { parseId } from "../utils/parseId";
+import { logAudit, toJson } from "../utils/audit";
 
 const router = Router();
 
@@ -88,10 +89,22 @@ router.get("/:id", async (req, res) => {
 router.post("/", requireRole("ADMIN"), async (req, res) => {
   const data = employeeSchema.parse(req.body);
   await ensureDepartmentExists(data.departmentId);
-  const employee = await prisma.employee.create({
-    data,
-    include: { department: { select: { id: true, name: true } } },
+
+  const employee = await prisma.$transaction(async (tx) => {
+    const created = await tx.employee.create({
+      data,
+      include: { department: { select: { id: true, name: true } } },
+    });
+    await logAudit(tx, {
+      userId: req.user!.id,
+      action: "CREATE",
+      entity: "employee",
+      entityId: created.id,
+      changes: toJson(created),
+    });
+    return created;
   });
+
   res.status(201).json({ success: true, data: employee });
 });
 
@@ -99,17 +112,48 @@ router.put("/:id", requireRole("ADMIN"), async (req, res) => {
   const id = parseId(req.params.id);
   const data = employeeSchema.parse(req.body);
   await ensureDepartmentExists(data.departmentId);
-  const employee = await prisma.employee.update({
-    where: { id },
-    data,
-    include: { department: { select: { id: true, name: true } } },
+
+  const employee = await prisma.$transaction(async (tx) => {
+    const before = await tx.employee.findUnique({ where: { id } });
+    if (!before) {
+      throw new AppError(404, "Karyawan tidak ditemukan");
+    }
+    const updated = await tx.employee.update({
+      where: { id },
+      data,
+      include: { department: { select: { id: true, name: true } } },
+    });
+    await logAudit(tx, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entity: "employee",
+      entityId: id,
+      changes: toJson({ before, after: updated }),
+    });
+    return updated;
   });
+
   res.json({ success: true, data: employee });
 });
 
 router.delete("/:id", requireRole("ADMIN"), async (req, res) => {
   const id = parseId(req.params.id);
-  await prisma.employee.delete({ where: { id } });
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.employee.findUnique({ where: { id } });
+    if (!before) {
+      throw new AppError(404, "Karyawan tidak ditemukan");
+    }
+    await tx.employee.delete({ where: { id } });
+    await logAudit(tx, {
+      userId: req.user!.id,
+      action: "DELETE",
+      entity: "employee",
+      entityId: id,
+      changes: toJson(before),
+    });
+  });
+
   res.json({ success: true, message: "Karyawan berhasil dihapus" });
 });
 
