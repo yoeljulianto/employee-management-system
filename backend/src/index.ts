@@ -8,6 +8,8 @@ import employeeRoutes from "./routes/employee.routes";
 import auditRoutes from "./routes/audit.routes";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { prisma } from "./lib/prisma";
+import swaggerUi from "swagger-ui-express";
+import { openApiSpec } from "./docs/openapi";
 
 const app = express();
 
@@ -33,6 +35,15 @@ app.get("/health", async (_req, res) => {
     });
   }
 });
+
+app.use(
+  "/api-documentation",
+  swaggerUi.serve,
+  swaggerUi.setup(openApiSpec, {
+    customSiteTitle: "Employee Management API",
+    swaggerOptions: { persistAuthorization: true },
+  }),
+);
 
 app.use(apiLimiter);
 
