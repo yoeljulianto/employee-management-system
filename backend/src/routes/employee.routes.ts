@@ -6,6 +6,7 @@ import { authenticate, requireRole } from "../middleware/auth";
 import { AppError } from "../utils/AppError";
 import { parseId } from "../utils/parseId";
 import { logAudit, toJson } from "../utils/audit";
+import { toCsv } from "../utils/csv";
 
 const router = Router();
 
@@ -32,6 +33,27 @@ const listQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
 });
 
+const exportQuerySchema = listQuerySchema.omit({ page: true, limit: true });
+
+function buildWhere(filters: {
+  search?: string;
+  departmentId?: number;
+  status?: "ACTIVE" | "INACTIVE";
+}): Prisma.EmployeeWhereInput {
+  const { search, departmentId, status } = filters;
+  return {
+    ...(departmentId && { departmentId }),
+    ...(status && { status }),
+    ...(search && {
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { position: { contains: search, mode: "insensitive" } },
+      ],
+    }),
+  };
+}
+
 async function ensureDepartmentExists(id: number) {
   const department = await prisma.department.findUnique({ where: { id } });
   if (!department) {
@@ -44,17 +66,7 @@ router.use(authenticate);
 router.get("/", async (req, res) => {
   const { page, limit, search, departmentId, status, sortBy, order } = listQuerySchema.parse(req.query);
 
-  const where: Prisma.EmployeeWhereInput = {
-    ...(departmentId && { departmentId }),
-    ...(status && { status }),
-    ...(search && {
-      OR: [
-        { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-        { position: { contains: search, mode: "insensitive" } },
-      ],
-    }),
-  };
+  const where = buildWhere({ search, departmentId, status });
 
   const [items, total] = await Promise.all([
     prisma.employee.findMany({
@@ -72,6 +84,34 @@ router.get("/", async (req, res) => {
     data: items,
     meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
+});
+
+router.get("/export", async (req, res) => {
+  const { search, departmentId, status, sortBy, order } = exportQuerySchema.parse(req.query);
+
+  const employees = await prisma.employee.findMany({
+    where: buildWhere({ search, departmentId, status }),
+    orderBy: { [sortBy]: order },
+    include: { department: { select: { name: true } } },
+  });
+
+  const csv = toCsv(
+    ["ID", "Nama", "Email", "No. HP", "Jabatan", "Departemen", "Status", "Tanggal Masuk"],
+    employees.map((e) => [
+      e.id,
+      e.name,
+      e.email,
+      e.phone,
+      e.position,
+      e.department.name,
+      e.status,
+      e.hireDate.toISOString().slice(0, 10),
+    ]),
+  );
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="employees.csv"');
+  res.send("\uFEFF" + csv);
 });
 
 router.get("/:id", async (req, res) => {
