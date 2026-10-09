@@ -77,3 +77,35 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
   return body as T;
 }
+
+export async function downloadFile(path: string, filename: string) {
+  const token = getToken();
+  let res: Response;
+
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError("Tidak dapat terhubung ke server", 0);
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (res.status === 401 && token) {
+      clearSession();
+      window.location.assign("/login");
+    }
+    throw new ApiError(body?.message ?? "Gagal mengunduh file", res.status, body?.errors ?? []);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

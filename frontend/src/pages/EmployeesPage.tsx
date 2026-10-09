@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { Link } from "react-router-dom";
+import { useAuth } from "../auth/context";
+import StatusBadge from "../components/StatusBadge";
+import { api, ApiError, downloadFile } from "../lib/api";
+import { formatDate } from "../lib/format";
 import { useDebounce } from "../lib/useDebounce";
 import type { Department, Employee, PageMeta } from "../types";
 
@@ -19,28 +23,6 @@ type Result = { key: string; employees?: Employee[]; meta?: PageMeta; error?: st
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function StatusBadge({ status }: { status: Employee["status"] }) {
-  const active = status === "ACTIVE";
-  return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-        active ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"
-      }`}
-    >
-      {active ? "Aktif" : "Nonaktif"}
-    </span>
-  );
-}
-
 export default function EmployeesPage() {
   const [searchInput, setSearchInput] = useState("");
   const [departmentId, setDepartmentId] = useState("");
@@ -50,6 +32,10 @@ export default function EmployeesPage() {
   const [reload, setReload] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [result, setResult] = useState<Result | null>(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   const search = useDebounce(searchInput.trim());
 
@@ -106,12 +92,52 @@ export default function EmployeesPage() {
     setPage(1);
   }
 
+  async function handleExport() {
+    setExporting(true);
+    setExportError("");
+    try {
+      const params = new URLSearchParams(queryString);
+      params.delete("page");
+      params.delete("limit");
+      await downloadFile(`/employees/export?${params.toString()}`, "employees.csv");
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Gagal mengunduh file");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-slate-800">Data Karyawan</h2>
-        {meta && <p className="text-sm text-slate-500">{meta.total} karyawan ditemukan</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">Data Karyawan</h2>
+          {meta && <p className="text-sm text-slate-500">{meta.total} karyawan ditemukan</p>}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {exporting ? "Mengunduh..." : "Export CSV"}
+          </button>
+          {isAdmin && (
+            <Link
+              to="/employees/new"
+              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              + Tambah Karyawan
+            </Link>
+          )}
+        </div>
       </div>
+
+      {exportError && (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {exportError}
+        </p>
+      )}
 
       <div className="grid gap-3 rounded-xl bg-white p-4 shadow sm:grid-cols-2 lg:grid-cols-4">
         <input
@@ -225,7 +251,9 @@ export default function EmployeesPage() {
                 {employees.map((e) => (
                   <tr key={e.id}>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-800">{e.name}</p>
+                      <Link to={`/employees/${e.id}`} className="font-medium text-blue-700 hover:underline">
+                      {e.name}
+                    </Link>
                       <p className="text-xs text-slate-500">{e.email}</p>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{e.position}</td>
@@ -245,7 +273,9 @@ export default function EmployeesPage() {
               <li key={e.id} className="rounded-xl bg-white p-4 shadow">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-medium text-slate-800">{e.name}</p>
+                    <Link to={`/employees/${e.id}`} className="font-medium text-blue-700 hover:underline">
+                      {e.name}
+                    </Link>
                     <p className="text-xs text-slate-500">{e.email}</p>
                   </div>
                   <StatusBadge status={e.status} />
