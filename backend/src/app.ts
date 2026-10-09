@@ -14,7 +14,11 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
+  : true;
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.get("/health", async (_req, res) => {
