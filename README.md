@@ -1,6 +1,6 @@
 # Employee Management System
 
-Aplikasi web pengelolaan data karyawan yang terdiri dari **REST API** (Node.js, Express, TypeScript, Prisma, PostgreSQL) dan **antarmuka React + TypeScript**. Dibuat sebagai tugas rekrutmen Maspion (posisi IT Developer).
+Aplikasi web pengelolaan data karyawan yang terdiri dari **REST API** (Node.js, Express, TypeScript, Prisma, PostgreSQL) dan **antarmuka React + TypeScript**. Dibuat sebagai tugas rekrutmen PT. Maspion (Programmer).
 
 ## Demo Live
 
